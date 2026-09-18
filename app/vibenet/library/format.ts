@@ -37,14 +37,23 @@ export function formatAmount(raw: string, decimals: number, maxFractionDigits = 
   try {
     const value = BigInt(raw);
     if (value === 0n) return '0';
+    // The sign is handled here rather than left to the arithmetic below: BigInt `%`
+    // keeps the dividend's sign, so a negative remainder would carry a `-` into the
+    // padStart/slice chain, and `/` truncates toward zero, so the whole part alone
+    // loses the sign whenever the magnitude is smaller than the divisor.
+    const negative = value < 0n;
+    const magnitude = negative ? -value : value;
     const divisor = 10n ** BigInt(decimals);
-    const whole = (value / divisor).toLocaleString();
-    const frac = (value % divisor)
+    const whole = (magnitude / divisor).toLocaleString();
+    const frac = (magnitude % divisor)
       .toString()
       .padStart(decimals, '0')
       .slice(0, maxFractionDigits)
       .replace(/0+$/, '');
-    return frac ? `${whole}.${frac}` : whole;
+    const rendered = frac ? `${whole}.${frac}` : whole;
+    // A magnitude too small to survive maxFractionDigits renders as '0', the same as
+    // on the positive side, so it is never reported as '-0'.
+    return negative && rendered !== '0' ? `-${rendered}` : rendered;
   } catch {
     return raw;
   }
